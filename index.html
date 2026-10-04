@@ -61,6 +61,9 @@ if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData) document.doc
   .fs-btn svg{width:16px;height:16px;}
   .app-header{flex:none;display:flex;align-items:center;gap:10px;padding:14px 16px 8px;}
   .mascot{width:40px;height:34px;flex:none;}
+  .bestik-face{flex:none;width:46px;height:46px;border-radius:50%;border:none;padding:0;background:var(--surface-2);overflow:hidden;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  .bestik-face img{width:100%;height:100%;object-fit:cover;object-position:50% 20%;display:block;transition:transform .18s;}
+  .bestik-face:active img{transform:scale(.92);}
   .device .logo-dark,.device.dark .logo-light{display:none !important;}
   .device.dark .logo-dark{display:block !important;}
   .mascot img{width:100%;height:100%;object-fit:contain;display:block;}
@@ -311,7 +314,7 @@ if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData) document.doc
 <body>
 <div class="device" id="device" data-theme="bestour">
   <header class="app-header">
-    <div class="mascot"><img class="logo-light" src="assets/logos/icon-green.svg" alt="Бест-Тур"><img class="logo-dark" src="assets/logos/icon-cream.svg" alt="Бест-Тур"></div>
+    <button class="bestik-face" id="bestikFace" aria-label="Бестик"><img id="bestikImg" src="assets/bestik/m01.webp" alt="Бестик"></button>
     <div><b>Бестик</b><small>Best Tour Club</small></div>
     <button class="fs-btn" id="fsBtn" style="display:none;" aria-label="На весь экран"></button>
   </header>
@@ -418,6 +421,8 @@ if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData) document.doc
         <h1>Настройки</h1>
         <div id="modeBlock"><div class="label">Оформление</div>
         <div class="seg" id="modeSeg"><button data-mode="light">Светлая</button><button data-mode="dark">Тёмная</button></div></div>
+        <div class="label" id="bestikModeLabel">Бестик</div>
+        <div class="seg" id="bestikSeg"><button data-bmode="live">Живой</button><button data-bmode="calm">Спокойный</button></div>
         <div id="setRoot" style="margin-top:14px;"></div>
       </div>
     </section>
@@ -543,11 +548,13 @@ function loadStatus(fresh){
     LIB = mergeList(LIB, d.library || []);
     applySettings(); seedLibrary();
     if(window.__openTextId && byId(window.__openTextId)){ var oid = window.__openTextId; window.__openTextId = null; showTab('texts'); openText(oid, 'texts'); }
-    clearPendingDone();
+    var hadPending = Object.keys(pending || {}).length; clearPendingDone();
+    if(hadPending && Object.keys(pending || {}).length < hadPending) faceReact('done', 3000, true);
+    faceState();
     if(currentTab === 'lib' && !draft && !(document.activeElement && document.activeElement.id === 'libQ')) renderLib();
     renderWeek(); renderUpcoming(); renderTextsList(); renderNote(); syncChecklistFromStatus();
     if(openId && !(document.activeElement && document.activeElement.classList.contains('layer-text'))) renderDetail();
-  }).catch(function(){ toast('Нет связи — показываю сохранённое'); });
+  }).catch(function(){ toast('Нет связи — показываю сохранённое'); faceReact('sad', 2600, true); });
 }
 document.addEventListener('visibilitychange', function(){ if(!document.hidden){ loadStatus(); loadTasks(); } });
 function taskApi(action, payload){
@@ -558,7 +565,9 @@ function taskApi(action, payload){
 function loadTasks(){
   if(!inTg) return Promise.resolve();
   return taskApi('tasks_list').then(function(d){
-    TASKS = d.tasks; MAC_ONLINE = d.mac_online;
+    var wasOnline = MAC_ONLINE; TASKS = d.tasks; MAC_ONLINE = d.mac_online;
+    if(wasOnline === false && MAC_ONLINE) faceReact('surprised', 2200, true);
+    if(typeof faceState === 'function') faceState();
     // «Ждёт Мака» держим, только пока задача ещё в очереди (её могли удалить или Мак уже взял в работу).
     Object.keys(pending).forEach(function(id){
       if(pending[id].queued && !TASKS.some(function(t){ return t.meta && (t.meta.planId === id || (t.meta.parts || []).some(function(p){ return p.planId === id; })); })) setPending(id, MAC_ONLINE ? {at: Date.now(), queued: false} : null);
@@ -714,7 +723,7 @@ $('weekPlan').addEventListener('click', function(e){
   var it = PLAN.find(function(p){ return p.id === id; }); if(!it) return;
   if(b.dataset.make) requestText(it);
   if(b.dataset.openText){ showTab('texts'); openText(it.textId, 'week'); }
-  if(b.dataset.publish){ it.status = 'Опубликовано'; savePlan(it); renderWeek(); toast('Отмечено: опубликовано'); }
+  if(b.dataset.publish){ it.status = 'Опубликовано'; savePlan(it); renderWeek(); faceReact('pleased', 2600); toast('Отмечено: опубликовано'); }
   if(b.dataset.menu) openItemSheet(it);
 });
 function requestText(it){
@@ -991,7 +1000,7 @@ $('checklist').addEventListener('click', function(e){
   if(k >= 0) checked.splice(k, 1); else checked.push(i);
   checkTouchedAt = Date.now(); renderChecklist();
   clearTimeout(checkTimer); checkTimer = setTimeout(function(){ bridge('checklist_set', {date: TODAY, done: checked.slice()}); }, 800);
-  if(checked.length === CHECKLIST.length) toast('Чек-лист на сегодня пройден');
+  if(checked.length === CHECKLIST.length){ toast('Чек-лист на сегодня пройден'); faceReact('happy', 3200); }
 });
 
 // ---------- Библиотека (приватное хранилище: STATUS.library, STATUS.settings) ----------
@@ -1263,6 +1272,8 @@ function applySettings(){
 function renderSettingsList(){
   var root = $('setRoot'); if(!root) return;
   $('modeBlock').style.display = setView ? 'none' : '';
+  $('bestikSeg').style.display = $('bestikModeLabel').style.display = setView ? 'none' : '';
+  document.querySelectorAll('#bestikSeg button').forEach(function(b){ b.classList.toggle('active', b.dataset.bmode === (bestikLive() ? 'live' : 'calm')); });
   var h1 = document.querySelector('#more-settings > h1'), bk = document.querySelector('#more-settings > .back');
   if(h1) h1.style.display = setView ? 'none' : ''; if(bk) bk.style.display = setView ? 'none' : '';
   if(!setView){
@@ -1316,6 +1327,25 @@ document.addEventListener('click', function(e){
 // Иконки интерфейса вместо эмодзи (правило владельца): тонкие линии, цвет текста.
 var ICONS = {"copy": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"8\" y=\"8\" width=\"12\" height=\"12\" rx=\"2.5\"/><path d=\"M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2\"/></svg>", "image": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3.5\" y=\"4.5\" width=\"17\" height=\"15\" rx=\"2.5\"/><circle cx=\"9\" cy=\"10\" r=\"1.6\"/><path d=\"M20 16l-4.5-4.5L6 19\"/></svg>", "layers": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 4l8 4-8 4-8-4z\"/><path d=\"M4 12l8 4 8-4M4 16l8 4 8-4\"/></svg>", "search": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"6\"/><path d=\"M20 20l-4.2-4.2\"/></svg>", "star": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 4l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 16.4l-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z\"/></svg>", "check": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12.5l4.2 4.2L19 7\"/></svg>", "cross": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6.5 6.5l11 11M17.5 6.5l-11 11\"/></svg>", "warn": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 4l9 16H3z\"/><path d=\"M12 10v4.5M12 17.5v.01\"/></svg>", "info": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 11v5M12 8v.01\"/></svg>", "pause": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 6v12M15 6v12\"/></svg>", "box": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"4.5\" width=\"15\" height=\"15\" rx=\"3\"/></svg>", "boxcheck": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"4.5\" width=\"15\" height=\"15\" rx=\"3\"/><path d=\"M8.5 12.3l2.5 2.5 4.5-5\"/></svg>", "trash": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12\"/></svg>", "close": "<svg class=\"ic\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 7l10 10M17 7L7 17\"/></svg>"};
 function ico(n){ return ICONS[n] || ''; }
+// ---------- Живой Бестик: мордочка в шапке ----------
+// Мордочка показывает состояние (думает / готово / спит …), на событие — одна
+// короткая реакция и обратно в спокойный. Режим «спокойный» — только состояния.
+var FACE = {calm:'01', happy:'02', lick:'03', worried:'04', surprised:'05', thinking:'06', sly:'07', wink:'08', sleepy:'09', pleased:'10', done:'11', sad:'12'};
+var faceBase = 'calm', faceTimer = null, faceTaps = [];
+(function(){ Object.keys(FACE).forEach(function(k){ var i = new Image(); i.src = 'assets/bestik/m' + FACE[k] + '.webp'; }); })();
+function bestikLive(){ return ((STATUS.settings || {}).bestik || {}).mode !== 'calm'; }
+function faceShow(k){ var img = document.getElementById('bestikImg'); if(img) img.src = 'assets/bestik/m' + FACE[k] + '.webp'; }
+function faceState(){
+  // постоянное состояние: Мак спит -> сонный; Бестик пишет -> думает; иначе спокойный
+  var writing = Object.keys(pending || {}).some(function(k){ return pending[k] && !pending[k].queued; });
+  faceBase = MAC_ONLINE === false ? 'sleepy' : writing ? 'thinking' : 'calm';
+  if(!faceTimer) faceShow(faceBase);
+}
+function faceReact(k, ms, calmToo){
+  if(!calmToo && !bestikLive()) return;
+  clearTimeout(faceTimer); faceShow(k);
+  faceTimer = setTimeout(function(){ faceTimer = null; faceShow(faceBase); }, ms || 2600);
+}
 var ST_ICON_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
 var ST_ICON_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>';
 var ST = {data: null, i: 0, sound: false, paused: false, skip: false, imgTimer: null, imgIdx: 0, audio: null, raf: 0};
@@ -1537,6 +1567,16 @@ function geminiWait(t, mode){
   }).catch(function(e){ toast(e.message === 'outside_telegram' ? 'Откройте приложение из Telegram' : 'Не получилось'); });
 }
 $('openGemini').addEventListener('click', function(){ openGemini(); });
+$('bestikFace').addEventListener('click', function(){
+  if(!bestikLive()){ faceReact('lick', 900, true); return; }
+  var now = Date.now(); faceTaps = faceTaps.filter(function(t){ return now - t < 2500; }); faceTaps.push(now);
+  faceReact(faceTaps.length > 3 ? 'sly' : 'lick', faceTaps.length > 3 ? 2200 : 1200);
+});
+// Первый заход за день — облизывается; больше трёх дней не заходили — озабочен.
+(function(){ var last = store('cc_last_day'); store('cc_last_day', TODAY);
+  if(last && last !== TODAY) setTimeout(function(){ faceReact((new Date(TODAY) - new Date(last)) / 864e5 > 3 ? 'worried' : 'lick', 2600); }, 1200); })();
+$('bestikSeg').addEventListener('click', function(e){ var b = e.target.closest('[data-bmode]'); if(!b) return;
+  setSave('bestik', {mode: b.dataset.bmode}); renderSettingsList(); toast(b.dataset.bmode === 'calm' ? 'Бестик спокойный: только состояния' : 'Бестик живой'); faceReact(b.dataset.bmode === 'calm' ? 'calm' : 'wink', 1600, true); });
 $('fsBtn').addEventListener('click', function(){
   if(!fsSupported()) return;
   if(tg.isFullscreen){ store('cc_fullscreen', '0'); tg.exitFullscreen(); } else { store('cc_fullscreen', '1'); tg.requestFullscreen(); }
@@ -1675,6 +1715,7 @@ $('checkRun').addEventListener('click', function(){
   out.push(ex > 2 ? ['!', 'Восклицательных знаков: ' + ex + ' — тон спокойнее, когда их 1–2'] : ['✓', 'Тон в норме']);
   out.push(['i', 'Цены и даты сверьте с каталогом: проверка их не видит']);
   var bad = out.some(function(o){ return o[0] === '✗'; }), warn = out.some(function(o){ return o[0] === '!'; });
+  faceReact(bad ? 'sly' : warn ? 'calm' : 'pleased', 2600);
   $('checkResult').style.display = '';
   $('checkResult').innerHTML = '<b style="display:block;margin-bottom:4px;">' + (bad ? 'Стоит подправить' : warn ? 'Можно публиковать, но гляньте замечания' : 'Можно публиковать') + '</b>'
     + out.map(function(o){ return '<div><i>' + {'✓':'<span class="v-ok">' + ico('check') + '</span>','✗':'<span class="v-bad">' + ico('cross') + '</span>','!':'<span class="v-warn">' + ico('warn') + '</span>','i':'<span class="v-info">' + ico('info') + '</span>'}[o[0]] + '</i><span>' + esc(o[1]) + '</span></div>'; }).join('');
