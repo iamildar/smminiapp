@@ -1239,8 +1239,10 @@ var SET_LISTS = {
   signatures: {name: 'Подписи и призывы', hint: 'Концовки и призывы, которые Бестик берёт в тексты.', add: 'Новая подпись'},
   platformOrder: {name: 'Порядок площадок', hint: 'В этом порядке площадки идут в конструкторе и в плане.', fixed: true},
   hashtags: {name: 'Хештеги по площадкам', hint: 'Бестик ставит эти хештеги. Через пробел, по площадкам.'},
+  morning: {name: 'Утреннее сообщение', hint: 'Каждое утро Бестик присылает в чат план на сегодня и кнопку «Открыть неделю». Работает и при выключенном Маке.'},
   guides: {name: 'Гиды', hint: 'В сценарии разговорного видео — кнопки «Подставить имя» по каждому гиду. Если гид один, Бестик подставит его сам.', add: 'Имя гида'}
 };
+var MORNING_TZ = {'Asia/Ho_Chi_Minh': 'Вьетнам (UTC+7)', 'Europe/Moscow': 'Москва (UTC+3)', 'Asia/Yekaterinburg': 'Екатеринбург (UTC+5)', 'Asia/Novosibirsk': 'Новосибирск (UTC+7)', 'Asia/Bangkok': 'Таиланд (UTC+7)', 'Asia/Dubai': 'Дубай (UTC+4)'};
 var setView = null, setEdit = false;
 function settings(){ return STATUS.settings || {}; }
 function setValue(key){
@@ -1248,6 +1250,7 @@ function setValue(key){
   if(key === 'checklist') return (s.checklist && s.checklist.length ? s.checklist : CHECKLIST).slice();
   if(key === 'platformOrder') return (s.platformOrder && s.platformOrder.length ? s.platformOrder : ALL_PLATFORMS.map(function(p){ return p[0]; })).slice();
   if(key === 'hashtags') return JSON.parse(JSON.stringify(s.hashtags || {}));
+  if(key === 'morning') return Object.assign({on: false, time: '09:00', tz: 'Asia/Ho_Chi_Minh'}, s.morning || {});
   if(key === 'guides') return (s.guides && s.guides.length ? s.guides : s.guideName ? [s.guideName] : []).slice();
   return (s[key] || []).slice();
 }
@@ -1264,11 +1267,19 @@ function renderSettingsList(){
   if(h1) h1.style.display = setView ? 'none' : ''; if(bk) bk.style.display = setView ? 'none' : '';
   if(!setView){
     root.innerHTML = '<div class="label">Бестик и тексты</div><div class="card" style="overflow:hidden;">' + Object.keys(SET_LISTS).map(function(k){
-      var v = setValue(k), n = k === 'hashtags' ? Object.keys(v).filter(function(p){ return (v[p] || []).length; }).length + ' площ.' : v.length;
+      var v = setValue(k), n = k === 'morning' ? (v.on ? v.time + ' · ' + (MORNING_TZ[v.tz] || v.tz) : 'выкл') : k === 'hashtags' ? Object.keys(v).filter(function(p){ return (v[p] || []).length; }).length + ' площ.' : v.length;
       return '<button class="menu-row" data-setopen="' + k + '"><span>' + SET_LISTS[k].name + '</span><b class="lib-count">' + esc(String(n)) + '</b>›</button>'; }).join('') + '</div>';
     return;
   }
   var cfg = SET_LISTS[setView], v = setValue(setView), head = '<div class="lib-head"><button class="back" data-setback="1">‹ Настройки</button>' + (Array.isArray(v) ? '<button class="link-btn" data-setedit="1">' + (setEdit ? 'Готово' : 'Править') + '</button>' : '') + '</div><h1>' + cfg.name + '</h1><p class="sub">' + cfg.hint + '</p>';
+  if(setView === 'morning'){
+    root.innerHTML = head + '<label class="toggle"><input type="checkbox" id="mOn" ' + (v.on ? 'checked' : '') + '> Присылать по утрам</label>'
+      + '<div class="label">Время</div><input class="dg-title" id="mTime" type="time" value="' + esc(v.time) + '">'
+      + '<div class="label">Часовой пояс</div><select class="lib-select wide" id="mTz">' + Object.keys(MORNING_TZ).map(function(z){ return '<option value="' + z + '"' + (z === v.tz ? ' selected' : '') + '>' + MORNING_TZ[z] + '</option>'; }).join('') + '</select>'
+      + '<div class="sub" style="margin:6px 2px 0;">Время — в выбранном поясе. Вернулись в Россию — смените пояс, время пересчитывать не нужно.</div>'
+      + '<button class="btn wide" data-msave="1" style="margin-top:10px;">Сохранить</button><button class="btn ghost wide" data-mtest="1" style="margin-top:8px;">Прислать пробное сейчас</button>';
+    return;
+  }
   if(setView === 'hashtags'){ root.innerHTML = head + ALL_PLATFORMS.filter(function(p){ return p[0] !== 'Avito'; }).map(function(p){ return '<div class="label">' + p[1] + '</div><input class="dg-title" data-settag="' + p[0] + '" placeholder="#кавказ #горы" value="' + esc((v[p[0]] || []).join(' ')) + '">'; }).join('') + '<button class="btn wide" data-settags="1" style="margin-top:10px;">Сохранить</button>'; return; }
   root.innerHTML = head + '<div class="card set-list" id="setList">' + (v.map(function(t, i){
     return '<div class="set-row' + (setEdit ? ' editing' : '') + '" data-si="' + i + '">' + (setEdit && !cfg.fixed ? '<button class="lib-minus" data-setdel="' + i + '">−</button>' : '')
@@ -1292,6 +1303,8 @@ document.addEventListener('click', function(e){
     el.innerHTML = '<input class="dg-title" value="' + esc(arr[k]) + '">'; var inp = el.querySelector('input'); inp.focus();
     inp.onblur = inp.onchange = function(){ if(inp.value.trim() && inp.value.trim() !== arr[k]){ arr[k] = inp.value.trim(); setSave(setView, arr); } renderSettingsList(); }; return; }
   if(g('data-setadd') !== null){ var n = $('setNew').value.trim(); if(!n) return; var l2 = setValue(setView); l2.push(n); setSave(setView, l2); renderSettingsList(); toast('Добавлено — Бестик учтёт сразу'); return; }
+  if(g('data-msave') !== null){ setSave('morning', {on: $('mOn').checked, time: $('mTime').value || '09:00', tz: $('mTz').value}); toast($('mOn').checked ? 'Утреннее сообщение включено' : 'Утреннее сообщение выключено'); setView = null; renderSettingsList(); return; }
+  if(g('data-mtest') !== null){ taskApi('morning_test', {}).then(function(d){ toast(d.ok ? 'Отправил в чат' : 'Не получилось'); }).catch(function(e){ toast(e.message === 'outside_telegram' ? 'Откройте приложение из Telegram' : 'Не получилось'); }); return; }
   if(g('data-settags') !== null){ var h = {}; document.querySelectorAll('[data-settag]').forEach(function(inp){ var tags = inp.value.split(/[\s,]+/).filter(Boolean); if(tags.length) h[inp.dataset.settag] = tags; }); setSave('hashtags', h); toast('Хештеги сохранены'); setView = null; renderSettingsList(); return; }
 });
 
