@@ -56,7 +56,8 @@ if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData) document.doc
     html.in-tg .sheet{left:50%;right:auto;width:min(680px,100%);margin-left:max(-340px,-50%);}
   }
   /* Полный экран Telegram (Bot API 8.0): сверху его кнопки, снизу — полоска «домой» */
-  .app-header{padding-top:calc(14px + var(--tg-safe-area-inset-top,0px) + var(--tg-content-safe-area-inset-top,0px));}
+  .device .app-header{padding-top:calc(14px + var(--tg-safe-area-inset-top,0px) + var(--tg-content-safe-area-inset-top,0px));}
+  @media (max-width:500px){ .fs-txt{display:none;} .fs-btn{width:36px;padding:0;justify-content:center;} }
   .fs-btn{margin-left:auto;flex:none;height:36px;border:1px solid var(--line);background:var(--surface);color:var(--heading);border-radius:99px;padding:0 12px;font-size:12.6px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;}
   .fs-btn svg{width:16px;height:16px;}
   .app-header{flex:none;display:flex;align-items:center;gap:10px;padding:14px 16px 8px;}
@@ -451,17 +452,27 @@ if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData) document.doc
 <script>
 var tg = window.Telegram ? window.Telegram.WebApp : null;
 if(tg){ tg.ready(); tg.expand(); if(typeof tg.disableVerticalSwipes === 'function'){ try{ tg.disableVerticalSwipes(); }catch(e){} } }
+// Стянуть приложение вниз (свернуть, как окно Telegram) — только когда список
+// прокручен до верха и не открыто окно/справка: иначе свайп мешал бы прокрутке.
+function syncSwipes(){
+  if(!tg || typeof tg.enableVerticalSwipes !== 'function') return;
+  var body = document.getElementById('appBody'), sheet = document.getElementById('sheet'), st = document.getElementById('stories');
+  var atTop = body && body.scrollTop <= 0, modal = (sheet && sheet.classList.contains('show')) || (st && st.classList.contains('show'));
+  try{ if(atTop && !modal) tg.enableVerticalSwipes(); else tg.disableVerticalSwipes(); }catch(e){}
+}
+document.addEventListener('DOMContentLoaded', function(){ var b = document.getElementById('appBody'); if(b) b.addEventListener('scroll', syncSwipes, {passive: true}); syncSwipes(); });
+setInterval(syncSwipes, 700);
 var inTg = !!(tg && tg.initData);
 // «На весь экран» — только на iPad и в Telegram 8.0+ (requestFullscreen). Выбор
 // помним: на iPad при следующем открытии сразу разворачиваем.
 var FS_ICON_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>';
 var FS_ICON_CLOSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10h-6V4M4 14h6v6M14 10l7-7M10 14l-7 7"/></svg>';
-function fsSupported(){ return !!(inTg && typeof tg.requestFullscreen === 'function' && typeof tg.isVersionAtLeast === 'function' && tg.isVersionAtLeast('8.0') && Math.min(screen.width, screen.height) >= 600); }
+function fsSupported(){ return !!(inTg && typeof tg.requestFullscreen === 'function' && typeof tg.isVersionAtLeast === 'function' && tg.isVersionAtLeast('8.0')); }
 function fsRender(){
   var b = document.getElementById('fsBtn'); if(!b) return;
   if(!fsSupported()){ b.style.display = 'none'; return; }
   var on = !!tg.isFullscreen; b.style.display = '';
-  b.innerHTML = (on ? FS_ICON_CLOSE + 'Свернуть экран' : FS_ICON_OPEN + 'На весь экран');
+  b.innerHTML = (on ? FS_ICON_CLOSE + '<span class="fs-txt">Свернуть экран</span>' : FS_ICON_OPEN + '<span class="fs-txt">На весь экран</span>');
   b.setAttribute('aria-label', on ? 'Свернуть экран' : 'На весь экран');
   document.documentElement.classList.toggle('tg-fs', on);
 }
